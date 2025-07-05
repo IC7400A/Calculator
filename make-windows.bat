@@ -1,50 +1,66 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
-REM Check if first argument is clean
+REM ===============================
+REM Clean build files if requested
+REM ===============================
 if /I "%1"=="clean" (
-    echo Cleaning build files...
-    rmdir /s /q venv
-    del /q libcalc.dll
-    rmdir /s /q build dist __pycache__
-    del /q Calculator.spec
+    echo Cleaning...
+    rmdir /s /q venv build dist __pycache__ 2>nul
+    del /q libcalc.dll libcalc.a Calculator.spec 2>nul
+    echo Clean complete.
     goto :EOF
 )
 
-REM Check for Python
-where python >nul 2>&1
-if errorlevel 1 (
-    echo Python is not installed or not in PATH.
-    echo Please install Python and add it to your system PATH.
-    exit /b 1
+REM ===============================
+REM Check prerequisites
+REM ===============================
+echo Checking prerequisites...
+where python >nul 2>&1 || (echo Error: Python not found. && exit /b 1)
+where gcc >nul 2>&1 || (echo Error: GCC not found. && exit /b 1)
+
+REM ===============================
+REM Setup virtual environment and dependencies
+REM ===============================
+echo Setting up environment...
+if not exist "venv" python -m venv venv || (echo Error: Venv creation failed. && exit /b 1)
+call venv\Scripts\activate.bat || (echo Error: Venv activation failed. && exit /b 1)
+
+REM Use 'python -m pip' to ensure pip within the venv is targeted
+python -m pip install --upgrade pip >nul || (echo Error: Pip upgrade failed. && exit /b 1)
+if exist "requirements.txt" (
+    python -m pip install -r requirements.txt >nul || (echo Error: Dependency install failed. && exit /b 1)
+) else (
+    echo Warning: requirements.txt not found.
 )
 
-REM Check for gcc (mingw)
-where gcc >nul 2>&1
-if errorlevel 1 (
-    echo GCC (mingw) not found.
-    echo Please install mingw and add gcc to your PATH.
-    exit /b 1
-)
-
-REM Create virtual environment if not exists
-if not exist venv (
-    echo Creating virtual environment...
-    python -m venv venv
-)
-
-REM Activate virtual environment and install requirements
-call venv\Scripts\activate.bat
-pip install --upgrade pip
-pip install -r requirements.txt
-
-REM Build DLL with mingw gcc
+REM ===============================
+REM Build DLL
+REM ===============================
 echo Compiling DLL...
-gcc -shared -o libcalc.dll -Wl,--out-implib,libcalc.a -Wl,--dll calc.c
+if not exist "calc.c" (echo Error: calc.c not found. && deactivate >nul 2>&1 && exit /b 1)
+gcc -shared -o libcalc.dll -Wl,--out-implib,libcalc.a -Wl,--dll calc.c || (echo Error: DLL compile failed. && deactivate >nul 2>&1 && exit /b 1)
 
-REM Build executable with PyInstaller including DLL
+REM ===============================
+REM Build executable with PyInstaller
+REM ===============================
 echo Building executable...
-pyinstaller --onefile --windowed --icon=icon.ico --add-binary "libcalc.dll;." --name Calculator calculator.py
+if not exist "calculator.py" (echo Error: calculator.py not found. && deactivate >nul 2>&1 && exit /b 1)
 
+set "PYINSTALLER_CMD=pyinstaller --onefile --windowed --add-binary "libcalc.dll;." --name Calculator calculator.py"
+if exist "icon.ico" (
+    set "PYINSTALLER_CMD=%PYINSTALLER_CMD% --icon=icon.ico"
+) else (
+    echo Warning: icon.ico not found. Building without icon.
+)
+
+%PYINSTALLER_CMD% || (echo Error: PyInstaller build failed. && deactivate >nul 2>&1 && exit /b 1)
+
+REM ===============================
+REM Finish
+REM ===============================
 echo Build complete.
+deactivate >nul 2>&1
+echo Executable in 'dist' folder.
 pause
+endlocal

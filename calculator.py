@@ -23,7 +23,7 @@ class Calculator(QWidget):
         self.setWindowTitle("Calculator")
         self.setFixedSize(360, 500)
 
-        icon_path = resource_path("./icon.ico")  # icon.png should be in the same directory
+        icon_path = resource_path("icon.png")  # icon.png should be in the same directory
         self.setWindowIcon(QIcon(icon_path))
 
 
