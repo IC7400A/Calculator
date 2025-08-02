@@ -2,65 +2,58 @@
 setlocal EnableDelayedExpansion
 
 REM ===============================
-REM Clean build files if requested
+REM Configuration
+REM ===============================
+set VENV_DIR=venv
+set C_SRC=core\calc_functions.c
+set DLL_NAME=calc_functions.dll
+set PY_ENTRY=main.py
+set EXE_NAME=Calculator
+
+REM ===============================
+REM Clean Target
 REM ===============================
 if /I "%1"=="clean" (
-    echo Cleaning...
-    rmdir /s /q venv build dist __pycache__ 2>nul
-    del /q libcalc.dll libcalc.a Calculator.spec 2>nul
+    echo >>> Cleaning...
+    if exist !VENV_DIR! rmdir /s /q !VENV_DIR!
+    if exist build rmdir /s /q build
+    if exist dist rmdir /s /q dist
+    if exist __pycache__ rmdir /s /q __pycache__
+    if exist core\__pycache__ rmdir /s /q core\__pycache__
+    if exist ui\__pycache__ rmdir /s /q ui\__pycache__
+    del /q !DLL_NAME! *.spec >nul 2>&1
     echo Clean complete.
     goto :EOF
 )
 
 REM ===============================
-REM Check prerequisites
+REM Setup Environment
 REM ===============================
-echo Checking prerequisites...
-where python >nul 2>&1 || (echo Error: Python not found. && exit /b 1)
-where gcc >nul 2>&1 || (echo Error: GCC not found. && exit /b 1)
-
-REM ===============================
-REM Setup virtual environment and dependencies
-REM ===============================
-echo Setting up environment...
-if not exist "venv" python -m venv venv || (echo Error: Venv creation failed. && exit /b 1)
-call venv\Scripts\activate.bat || (echo Error: Venv activation failed. && exit /b 1)
-
-REM Use 'python -m pip' to ensure pip within the venv is targeted
-python -m pip install --upgrade pip >nul || (echo Error: Pip upgrade failed. && exit /b 1)
-if exist "requirements.txt" (
-    python -m pip install -r requirements.txt >nul || (echo Error: Dependency install failed. && exit /b 1)
-) else (
-    echo Warning: requirements.txt not found.
+echo >>> Setting up environment...
+if not exist "!VENV_DIR!\Scripts\activate.bat" (
+    echo Creating virtual environment...
+    python -m venv !VENV_DIR! || (echo [ERROR] Venv creation failed. && exit /b 1)
 )
+call !VENV_DIR!\Scripts\activate.bat || (echo [ERROR] Venv activation failed. && exit /b 1)
+echo Installing dependencies...
+python -m pip install --upgrade pip >nul
+python -m pip install -r requirements.txt >nul || (echo [ERROR] Dependency install failed. && exit /b 1)
 
 REM ===============================
-REM Build DLL
+REM Build DLL from core directory
 REM ===============================
-echo Compiling DLL...
-if not exist "calc.c" (echo Error: calc.c not found. && deactivate >nul 2>&1 && exit /b 1)
-gcc -shared -o libcalc.dll -Wl,--out-implib,libcalc.a -Wl,--dll calc.c || (echo Error: DLL compile failed. && deactivate >nul 2>&1 && exit /b 1)
+echo >>> Compiling DLL...
+if not exist "!C_SRC!" (echo [ERROR] !C_SRC! not found. && exit /b 1)
+gcc -shared -o !DLL_NAME! !C_SRC! || (echo [ERROR] DLL compile failed. && exit /b 1)
 
 REM ===============================
-REM Build executable with PyInstaller
+REM Build Executable
 REM ===============================
-echo Building executable...
-if not exist "calculator.py" (echo Error: calculator.py not found. && deactivate >nul 2>&1 && exit /b 1)
+echo >>> Building executable...
+if not exist "!PY_ENTRY!" (echo [ERROR] !PY_ENTRY! not found. && exit /b 1)
+pyinstaller --onefile --windowed --name !EXE_NAME! --add-binary "!DLL_NAME!;core" !PY_ENTRY! || (echo [ERROR] PyInstaller build failed. && exit /b 1)
 
-set "PYINSTALLER_CMD=pyinstaller --onefile --windowed --add-binary "libcalc.dll;." --name Calculator calculator.py"
-if exist "icon.ico" (
-    set "PYINSTALLER_CMD=%PYINSTALLER_CMD% --icon=icon.ico"
-) else (
-    echo Warning: icon.ico not found. Building without icon.
-)
-
-%PYINSTALLER_CMD% || (echo Error: PyInstaller build failed. && deactivate >nul 2>&1 && exit /b 1)
-
-REM ===============================
-REM Finish
-REM ===============================
-echo Build complete.
-deactivate >nul 2>&1
-echo Executable in 'dist' folder.
+echo.
+echo Build complete. Executable is in the 'dist' folder.
 pause
 endlocal

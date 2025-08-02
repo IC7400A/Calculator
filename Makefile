@@ -1,45 +1,49 @@
-# Makefile for building Calculator app on Linux
+# Makefile for building Calculator app on Linux/macOS
 
-# Source and target names
-C_SRC       = calc.c
-SO_FILE     = libcalc.so
-PY_SRC      = calculator.py
-ICON        = icon.ico
-PY_REQ      = requirements.txt
+# --- Variables ---
 VENV        = venv
-EXE_NAME    = Calculator
+PYTHON      = $(VENV)/bin/python3
+PIP         = $(VENV)/bin/pip
 PYINSTALLER = $(VENV)/bin/pyinstaller
 CC          = gcc
 
-.PHONY: all clean
+# --- Source and Target Names ---
+C_SRC       = core/calc_functions.c
+LIB_NAME    = libcalc_functions.so
+PY_ENTRY    = main.py
+EXE_NAME    = Calculator
 
-# Main target: builds everything
-all: $(VENV)/bin/activate $(SO_FILE) build_exe
+.PHONY: all clean run build_exe
 
-# Set up virtual environment and install Python requirements
-$(VENV)/bin/activate:
-	@echo "Creating virtual environment (if not exists)..."
+# --- Main Targets ---
+all: build
+
+build: $(VENV)/bin/activate $(LIB_NAME) build_exe
+
+run: $(VENV)/bin/activate
+	@echo ">>> Running the application..."
+	@$(PYTHON) $(PY_ENTRY)
+
+# --- Build Steps ---
+$(VENV)/bin/activate: requirements.txt
+	@echo ">>> Setting up virtual environment..."
 	@test -d $(VENV) || python3 -m venv $(VENV)
-	@echo "Installing Python dependencies..."
-	@$(VENV)/bin/pip install --upgrade pip
-	@$(VENV)/bin/pip install -r $(PY_REQ)
+	@$(PIP) install --upgrade pip > /dev/null
+	@$(PIP) install -r requirements.txt > /dev/null
 
-# Compile the C code into a shared object for ctypes
-$(SO_FILE): $(C_SRC)
-	@echo "Compiling C shared library..."
-	$(CC) -fPIC -shared -o $(SO_FILE) $(C_SRC)
+$(LIB_NAME): $(C_SRC)
+	@echo ">>> Compiling C shared library..."
+	$(CC) -fPIC -shared -o $(LIB_NAME) $(C_SRC)
 
-# Build the final standalone binary using PyInstaller
 build_exe:
-	@echo "Building standalone executable with PyInstaller..."
+	@echo ">>> Building standalone executable with PyInstaller..."
 	@$(PYINSTALLER) --onefile --windowed \
-		--icon=$(ICON) \
-		--add-binary "$(SO_FILE):." \
 		--name=$(EXE_NAME) \
-		$(PY_SRC)
+		--add-binary "$(LIB_NAME):core" \
+		$(PY_ENTRY)
 
-# Clean all generated files
+# --- Housekeeping ---
 clean:
-	@echo "Cleaning build files..."
-	@rm -f $(SO_FILE)
-	@rm -rf __pycache__ build dist *.spec $(VENV)
+	@echo ">>> Cleaning build files..."
+	@rm -f $(LIB_NAME)
+	@rm -rf __pycache__ build dist *.spec $(VENV) core/__pycache__ ui/__pycache__
